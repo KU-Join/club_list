@@ -11,16 +11,13 @@ from json_utility.sql2json import sql2json, group_by_category
 from fastapi.encoders import jsonable_encoder
 
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-IMG_DIR = os.path.join(BASE_DIR, "img/")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+IMG_DIR = os.path.join(BASE_DIR, "img")
 
-BACKEND_URL = "http://localhost:8000/"
-
-conn = pymysql.connect(host='localhost', user='fastapi', password='7478', db='club_list', charset='utf8')
 cur = conn.cursor()
 
 app = FastAPI()
-@app.get("/clubs-lists/")
+@app.get("/club-list/")
 async def get_club_list():
     sql = "SELECT * FROM club_list ORDER BY category"
     cur.execute(sql)
@@ -32,7 +29,7 @@ async def get_club_list():
 
 @app.get("/images/{img_id}")
 async def get_img(img_id):
-    img_dir = './img/' + img_id + '.jpg'
+    img_dir = os.path.join(IMG_DIR, img_id + '.jpg')
     return FileResponse(img_dir)
 
     
@@ -42,30 +39,32 @@ def upload_image_file(club_img: bytes = File(...)):
     img = Image.open(img)
     img = img.convert("RGB")
     img_hash = imagehash.phash(img)
-    img.save(os.path.join(IMG_DIR, img_hash, '.jpg'))
+    # img.save(os.path.join(IMG_DIR, img_hash, '.jpg'))
 
     return img_hash
 
 @app.post("/club-form")
-def upload_club_data(club_name: str = Form(...), club_img: bytes = File(...), club_description: str = Form(...), category: str = Form(...)):
-    img = io.BytesIO(club_img)
-    img = Image.open(img)
-    img = img.convert("RGB")
-    img_hash = imagehash.phash(img)
-    img_path = os.path.join(IMG_DIR, img_hash, '.jpg')
-    img.save(img_path)
+def upload_club_data(club_name: str = Form(...), club_img: UploadFile = File(...), club_description: str = Form(...), category: str = Form(...)):
+    with club_img.file as img:
+        img = Image.open(img)
+        img = img.convert("RGB")
+        # img.show()
+        img_hash = imagehash.phash(img)
+        img_path = os.path.join(IMG_DIR, str(img_hash) + '.jpg')
+        img.save(img_path)
 
-    sql = "SELECT club_name FROM club_list"
-    cur.execute(sql)
-    rows = cur.fetchall()
+
     # 중복 제거 구현해야함.
     # if club_name in rows: ~~
 
     sql = f'INSERT INTO club_list(club_name, club_img, club_description, category, opened, club_URL) \
-        VALUES({club_name}, "{BACKEND_URL}/images/{img_path}", "{club_description}", "{category}", "False", "http://kuclub.com/51566714")'
+        VALUES(\"{club_name}\", \"{BACKEND_URL}/images/{img_hash}\", \"{club_description}\", \"{category}\", \"False\", \"http://kuclub.com/51566714\");'
+    print(sql)
+    cur.execute(sql)
+    conn.commit()
     
 
     return
 
 if __name__ == '__main__':
-    uvicorn.run("backend:app", host="localhost", port = 8000, reload = True)
+    uvicorn.run("backend:app", host="172.30.1.4", port = 80, reload = True)
