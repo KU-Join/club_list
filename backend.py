@@ -11,16 +11,16 @@ from json_utility.sql2json import sql2json, group_by_category
 from fastapi.encoders import jsonable_encoder
 
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-IMG_DIR = os.path.join(BASE_DIR, "img/")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+IMG_DIR = os.path.join(BASE_DIR, "img")
 
-BACKEND_URL = "http://localhost:8000/"
+BACKEND_URL = "http://localhost:8000"
 
 conn = pymysql.connect(host='localhost', user='ec2_club_list', password='ghkdidakdmfqkdqjaeo', db='club_list', charset='utf8')
 cur = conn.cursor()
 
 app = FastAPI()
-@app.get("/clubs-lists/")
+@app.get("/clubs-lists")
 async def get_club_list():
     sql = "SELECT * FROM club_list ORDER BY category"
     cur.execute(sql)
