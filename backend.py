@@ -14,17 +14,18 @@ from fastapi.encoders import jsonable_encoder
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMG_DIR = os.path.join(BASE_DIR, "img")
 
-BACKEND_URL = "http://localhost:8000"
+BACKEND_URL = "http://3.85.92.73"
 
-conn = pymysql.connect(host='localhost', user='ec2_club_list', password='ghkdidakdmfqkdqjaeo', db='club_list', charset='utf8')
+conn = pymysql.connect(host='localhost', user='ec2_club_list', password='ghkdidehd', db='club_list', charset='utf8')
 cur = conn.cursor()
 
 app = FastAPI()
-@app.get("/clubs-lists")
+@app.get("/club-list")
 async def get_club_list():
     sql = "SELECT * FROM club_list ORDER BY category"
     cur.execute(sql)
     rows = cur.fetchall()
+    print(rows)
     rows = group_by_category(rows)
     rows = jsonable_encoder(rows)
     return rows
@@ -32,7 +33,12 @@ async def get_club_list():
 
 @app.get("/images/{img_id}")
 async def get_img(img_id):
+    if not img_id.isalnum() or len(img_id) != 16:
+        return {"detail": "Not Found"}
     img_dir = os.path.join(IMG_DIR, img_id + '.jpg')
+    if not os.path.isfile(img_dir):
+        return {"detail": "Not Found"}
+    
     return FileResponse(img_dir)
 
     
@@ -48,6 +54,11 @@ def upload_image_file(club_img: bytes = File(...)):
 
 @app.post("/club-form")
 def upload_club_data(club_name: str = Form(...), club_img: UploadFile = File(...), club_description: str = Form(...), category: str = Form(...)):
+    if not isalnum(club_name):
+        return {"detail": "Not Found"}
+    if not len(club_name) < 30:
+        return {"detail": "Not Found"}
+
     with club_img.file as img:
         img = Image.open(img)
         img = img.convert("RGB")
@@ -65,9 +76,27 @@ def upload_club_data(club_name: str = Form(...), club_img: UploadFile = File(...
     print(sql)
     cur.execute(sql)
     conn.commit()
-    
-
     return
 
+@app.post("/update_club_form/{club_id}")
+def update_club_form(club_id: int, club_name: str = Form(...), club_img: UploadFile = File(...), club_description: str = Form(...), category: str = Form(...)):
+
+   
+    with club_img.file as img:
+        img = Image.open(img)
+        img = img.convert("RGB")
+        # img.show()
+        img_hash = imagehash.phash(img)
+        img_path = os.path.join(IMG_DIR, str(img_hash) + '.jpg')
+        img.save(img_path)
+    sql = f'UPDATE club_list SET club_name=\"{club_name}\", club_img=\"{BACKEND_URL}/images/{img_hash}\", club_description=\"{club_description}\", category=\"{category}\", club_URL=\"http://kuclub.com/51566714\" WHERE club_id={club_id}'
+    print(sql)
+    cur.execute(sql)
+    conn.commit()
+    
+    return 
+
+
+
 if __name__ == '__main__':
-    uvicorn.run("backend:app", host="localhost", port = 8000, reload = True)
+    uvicorn.run("backend:app", host="0.0.0.0", port = 5005, reload = True)
