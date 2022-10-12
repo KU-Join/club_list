@@ -9,11 +9,19 @@ def group_by_category(rows):
     json_data = rows
     print(json_data[0])
     club_list = {}
+
+    # list type
     for club in json_data:
-        if club[4] not in club_list:
-            club_list[club[4]] = {}
-        club_list[club[4]][club[1]]= {'club_id':club[0], 'club_img':club[2], 'club_description':club[3], 'opened':club[5], 'club_URL':club[6]}
-    print(club_list)
+        club_id, club_name, club_img, club_description, category, opened, club_URL = club
+        club_dict = {"club_name":club_name, "club_id":club_id, "club_img":club_img, "club_description":club_description, "opened":opened, "club_URL":club_URL}
+        if category not in club_list:
+            club_list[category] = []
+        club_list[club[4]].append(club_dict)
+    # dict type
+    # for club in json_data:
+    #     if club[4] not in club_list:
+    #         club_list[club[4]] = {}
+    #     club_list[club[4]][club[1]]= {'club_id':club[0], 'club_img':club[2], 'club_description':club[3], 'opened':club[5], 'club_URL':club[6]}
     return club_list
 
 
