@@ -7,25 +7,26 @@ import io
 from PIL import Image
 import imagehash
 import pymysql
-from json_utility.sql2json import sql2json, group_by_category
+from json_utility.sql2json import group_by_category
 from fastapi.encoders import jsonable_encoder
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMG_DIR = os.path.join(BASE_DIR, "img")
+FEED_IMG_DIR = os.path.join(BASE_DIR, "feed_img")
 
 BACKEND_URL = "http://3.85.92.73"
 
-conn = pymysql.connect(host='localhost', user='ec2_club_list', password='ghkdidehd', db='club_list', charset='utf8')
+conn = pymysql.connect(host='localhost', user='root', password='ghkdidakdmf', db='club_list', charset='utf8')
 cur = conn.cursor()
+
 
 app = FastAPI()
 @app.get("/club-list")
 async def get_club_list():
-    sql = "SELECT * FROM club_list ORDER BY category"
+    sql = "SELECT club_id, club_name, club_img, club_description, category, opened, club_URL FROM club_list ORDER BY category"
     cur.execute(sql)
     rows = cur.fetchall()
-    print(rows)
     rows = group_by_category(rows)
     rows = jsonable_encoder(rows)
     return rows
@@ -41,7 +42,55 @@ async def get_img(img_id):
     
     return FileResponse(img_dir)
 
+@app.get("/club-information/{club_id}")
+async def get_club_information(club_id):
+    sql = f"SELECT * FROM club_list WHERE club_id = {club_id}"
+    cur.execute(sql)
+    rows = cur.fetchall()
+    json = jsonable_encoder(rows)
+    return json
+
+@app.get("/club-feed/{club_id}")
+async def get_club_feed(club_id):
+    sql = f"SELECT feed_uploader, feed_img, feed_contents, time FROM club_feed WHERE feed_club={club_id} ORDER BY time DESC;"
+    cur.execute(sql)
+    rows = cur.fetchall()
+    json = jsonable_encoder(rows)
+    return json
+
+@app.get("/club-feed/images/{img_id}")
+async def get_club_feed_img(img_id):
+    if not img_id.isalnum() or len(img_id) != 16:
+        return {"detail": "Not Found"}
+    img_dir = os.path.join(FEED_IMG_DIR, img_id + '.jpg')
+    if not os.path.isfile(img_dir):
+        return {"detail": "Not Found"}
     
+    return FileResponse(img_dir)
+    
+@app.post("/club-feed/{club_id}")
+def post_club_feed(club_id, feed_uploader: str = Form(...), feed_contents: str = Form(...), feed_image: UploadFile = File(...)):
+    # feed_id, club_id, uploader_id, time, image_url, contents
+    with feed_image.file as img:
+        img = Image.open(img)
+        img = img.convert("RGB")
+        # img.show()
+        img_hash = imagehash.phash(img)
+        img_path = os.path.join(FEED_IMG_DIR, str(img_hash) + '.jpg')
+        img.save(img_path)
+
+
+    # 중복 제거 구현해야함.
+    # if club_name in rows: ~~
+
+    sql = f'INSERT INTO club_feed(feed_club, feed_uploader, feed_contents, feed_img) \
+        VALUES(\"{club_id}\", \"{feed_uploader}\", \"{feed_contents}\", \"{BACKEND_URL}/club-feed/images/{img_hash}\");'
+    cur.execute(sql)
+    conn.commit()
+    return
+
+
+
 @app.post("/upload-image")
 def upload_image_file(club_img: bytes = File(...)):
     img = io.BytesIO(club_img)
@@ -52,12 +101,14 @@ def upload_image_file(club_img: bytes = File(...)):
 
     return img_hash
 
+
 @app.post("/club-form")
-def upload_club_data(club_name: str = Form(...), club_img: UploadFile = File(...), club_description: str = Form(...), category: str = Form(...)):
-    if not isalnum(club_name):
-        return {"detail": "Not Found"}
+def upload_club_data(club_name: str = Form(...), club_img: UploadFile = File(...), club_description: str = Form(...), category: str = Form(...), leader_id: int = Form(...)):
     if not len(club_name) < 30:
-        return {"detail": "Not Found"}
+        return {"detail": "club_name must be shorter than 30."}
+    category_list = ["구기체육분과", "레저무예분과", "봉사분과", "어학분과", "연행예술분과", "인문사회분과", "자연과학분과", "종교분과", "창작비평분과", "가등록"]
+    if category not in category_list:
+        return {"detail": "invalid category."}
 
     with club_img.file as img:
         img = Image.open(img)
@@ -71,17 +122,21 @@ def upload_club_data(club_name: str = Form(...), club_img: UploadFile = File(...
     # 중복 제거 구현해야함.
     # if club_name in rows: ~~
 
-    sql = f'INSERT INTO club_list(club_name, club_img, club_description, category, opened, club_URL) \
-        VALUES(\"{club_name}\", \"{BACKEND_URL}/images/{img_hash}\", \"{club_description}\", \"{category}\", \"False\", \"http://kuclub.com/51566714\");'
+    sql = f'INSERT INTO club_list(club_name, club_img, club_description, category, opened, club_URL, leader_id) \
+        VALUES(\"{club_name}\", \"{BACKEND_URL}/images/{img_hash}\", \"{club_description}\", \"{category}\", \"False\", \"http://kuclub.com/51566714\", \"{leader_id}\");'
     print(sql)
     cur.execute(sql)
     conn.commit()
     return
 
-@app.post("/update_club_form/{club_id}")
-def update_club_form(club_id: int, club_name: str = Form(...), club_img: UploadFile = File(...), club_description: str = Form(...), category: str = Form(...)):
+@app.post("/update-club-form/{club_id}")
+def update_club_data(club_id: int, club_name: str = Form(...), club_img: UploadFile = File(...), club_description: str = Form(...), category: str = Form(...), leader_id: int = Form(...)):
 
-   
+    if not len(club_name) < 30:
+        return {"detail": "club_name must be shorter than 30"}
+    category_list = ["구기체육분과", "레저무예분과", "봉사분과", "어학분과", "연행예술분과", "인문사회분과", "자연과학분과", "종교분과", "창작비평분과", "가등록"]
+    if category not in category_list:
+        return {"detail": "invalid category."}
     with club_img.file as img:
         img = Image.open(img)
         img = img.convert("RGB")
@@ -99,4 +154,4 @@ def update_club_form(club_id: int, club_name: str = Form(...), club_img: UploadF
 
 
 if __name__ == '__main__':
-    uvicorn.run("backend:app", host="0.0.0.0", port = 5005, reload = True)
+    uvicorn.run("backend:app", host="172.31.24.17", port = 5005, reload = True)
