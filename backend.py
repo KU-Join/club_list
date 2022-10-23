@@ -15,7 +15,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMG_DIR = os.path.join(BASE_DIR, "img")
 FEED_IMG_DIR = os.path.join(BASE_DIR, "feed_img")
 
-BACKEND_URL = "http://3.85.92.73"
+BACKEND_URL = "http://35.170.94.193"
 
 conn = pymysql.connect(host='localhost', user='root', password='ghkdidakdmf', db='club_list', charset='utf8')
 cur = conn.cursor()
