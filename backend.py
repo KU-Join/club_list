@@ -36,6 +36,7 @@ FEED_IMG_DIR = os.path.join(BASE_DIR, "feed_img")
 BACKEND_URL = "http://35.170.94.193"
 
 conn = pymysql.connect(host='localhost', user='root', password='ghkdidakdmf', db='club_list', charset='utf8')
+conn.ping(reconnect=True)
 cur = conn.cursor()
 
 
@@ -65,8 +66,8 @@ async def get_club_information(club_id):
     sql = f"SELECT club_id, club_name, club_img, club_description, category, opened, club_URL, leader_id FROM club_list WHERE club_id = {club_id};"
     cur.execute(sql)
     rows = cur.fetchall()
-    if len(rows) < 0:
-        return {"fail":"fail"}
+    if len(rows) < 1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f'club_id Not found')
     club_id, club_name, club_img, club_description, category, opened, club_URL, leader_id = rows[0]
     club_dict = {"club_id":club_id, "club_name":club_name, "club_img":club_img, "club_description":club_description, "category":category, "opened":opened, "club_URL":club_URL, "leader_id":leader_id}
     json = jsonable_encoder(club_dict)
@@ -97,7 +98,7 @@ def get_registered_club(user_id: int):
     result = cur.fetchall()
     if(len(result) == 0):
         return {"club_id": []}
-    registered_club = result[0]
+    registered_club = [result[0]]
     return {"club_id": registered_club}
     
 @app.post("/club-feed/{club_id}", status_code=status.HTTP_201_CREATED)
@@ -198,5 +199,5 @@ def update_club_data(club_id: int, club_name: str = Form(...), club_img: UploadF
 if __name__ == '__main__':
     eureka_client.init(eureka_server="http://54.180.68.142:8761/", app_name="CLUB-SERVICE", instance_port=80)
     print("eureka_client_initialized")
-    uvicorn.run("backend:app", host="172.31.24.17", port = 5005, reload=True)
+    uvicorn.run("backend:app", host="0.0.0.0", port = 5005)
     
