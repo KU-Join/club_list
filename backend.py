@@ -1,7 +1,6 @@
 from http.client import HTTPException
 import json
 import os
-from unicodedata import category
 import uvicorn
 from fastapi import FastAPI, File, Form, UploadFile, status, HTTPException
 from fastapi.responses import FileResponse
@@ -92,14 +91,19 @@ async def get_club_feed_img(img_id):
     return FileResponse(img_dir)
 
 @app.get("/registered/{user_id}")
-def get_registered_club(user_id: int):
-    sql = f"select club_id from club_list where leader_id={user_id}"
+def get_registered_club(user_id: str):
+    sql = f"select club_id, club_name from club_list where leader_id=\"{user_id}\""
     cur.execute(sql)
     result = cur.fetchall()
     if(len(result) == 0):
         return {"club_id": []}
-    registered_club = [result[0]]
-    return {"club_id": registered_club}
+    registered_clubs = []
+    for club in result:
+        registered_clubs.append({"club_id":club[0], "club_name":club[1]})
+    
+
+
+    return jsonable_encoder(registered_clubs)
     
 @app.post("/club-feed/{club_id}", status_code=status.HTTP_201_CREATED)
 def post_club_feed(club_id, club_feed: ClubFeed):
@@ -138,7 +142,7 @@ def upload_image_file(club_img: bytes = File(...)):
 
 
 @app.post("/club-form", status_code=status.HTTP_201_CREATED)
-def upload_club_data(club_name: str = Form(...), club_img: Optional[UploadFile] = None, club_description: str = Form(...), category: str = Form(...), leader_id: int = Form(...)):
+def upload_club_data(club_name: str = Form(...), club_img: Optional[UploadFile] = None, club_description: str = Form(...), category: str = Form(...), leader_id: str = Form(...)):
 # def upload_club_data(data: ClubFormData = Form(...), ):
     # club_name = data.club_name
     # category = data.category
@@ -173,7 +177,7 @@ def upload_club_data(club_name: str = Form(...), club_img: Optional[UploadFile] 
     return
 
 @app.put("/club-form/{club_id}",)
-def update_club_data(club_id: int, club_name: str = Form(...), club_img: UploadFile = File(...), club_description: str = Form(...), category: str = Form(...), leader_id: int = Form(...)):
+def update_club_data(club_id: str, club_name: str = Form(...), club_img: UploadFile = File(...), club_description: str = Form(...), category: str = Form(...), leader_id: str = Form(...)):
 
     if not len(club_name) < 30:
         return {"detail": "club_name must be shorter than 30"}
@@ -197,7 +201,7 @@ def update_club_data(club_id: int, club_name: str = Form(...), club_img: UploadF
 
 
 if __name__ == '__main__':
-    eureka_client.init(eureka_server="http://54.180.68.142:8761/", app_name="CLUB-SERVICE", instance_port=80)
-    print("eureka_client_initialized")
-    uvicorn.run("backend:app", host="0.0.0.0", port = 5005)
+    eureka_client.init(eureka_server="http://54.180.68.142:8761/eureka", app_name="CLUB-SERVICE", instance_port=80, instance_ip="35.170.94.193")
+    print("EUREKA SEVER: http://54.180.68.142:8761/eureka")
+    uvicorn.run("backend:app", host="172.31.29.143", port = 5005)
     
