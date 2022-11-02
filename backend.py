@@ -36,6 +36,9 @@ BACKEND_URL = "http://35.170.94.193"
 
 conn = pymysql.connect(host='localhost', user='root', password='ghkdidakdmf', db='club_list', charset='utf8')
 conn.ping(reconnect=True)
+conn.query('SET GLOBAL connect_timeout=57600')
+conn.query('SET GLOBAL wait_timeout=57600')
+conn.query('SET GLOBAL interactive_timeout=57600')
 cur = conn.cursor()
 
 
@@ -74,7 +77,7 @@ async def get_club_information(club_id):
 
 @app.get("/club-feed/{club_id}")
 async def get_club_feed(club_id):
-    sql = f"SELECT feed_uploader, feed_img, feed_contents, time FROM club_feed WHERE feed_club={club_id} ORDER BY time DESC;"
+    sql = f"SELECT feed_uploader, feed_img, feed_contents, time FROM club_feed WHERE club_id={club_id} ORDER BY time DESC;"
     cur.execute(sql)
     rows = cur.fetchall()
     json = jsonable_encoder(rows)
@@ -104,26 +107,105 @@ def get_registered_club(user_id: str):
 
 
     return jsonable_encoder(registered_clubs)
+
+@app.get("/club-apply/{club_id}")
+def get_club_apply(club_id:str, user_id: str):
+
+    sql = f"SELECT club_id, leader_id FROM club_list WHERE club_id = {club_id};"
+    cur.execute(sql)
+    result = cur.fetchall()
+    leader_id = result[0][1]
+    if (len(result) == 0):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id {club_id} does not exist.")
+    if (str(leader_id) != str(user_id)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"user_id {user_id} is not leader of club_id {club_id}.")
+    sql = f"SELECT apply_id, club_id, user_id, club_name FROM club_apply WHERE club_id=\"{club_id}\""
+    cur.execute(sql)
+    result = cur.fetchall()
+    application_list = list()
+    if (len(result) == 0):
+        return application_list
+    for application in result:
+        apply_id, club_id, user_id, club_name = application
+        apply_dict = {"apply_id":str(apply_id), "club_name": str(club_name), "club_id":str(club_id), "user_id": str(user_id)}
+        application_list.append(apply_dict)
+    return jsonable_encoder(application_list)
+        
     
+
+@app.delete("/club-apply/{club_id}")
+def apply_accept_deny(club_id: str,  user_id: str, apply_id:str, accept:bool):
+    sql = f"SELECT club_id, leader_id, club_name FROM club_list WHERE club_id = {club_id};"
+    cur.execute(sql)
+    result = cur.fetchall()
+    leader_id = result[0][1]
+    club_name = result[0][2]
+    if (len(result) == 0):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id {club_id} does not exist.")
+    if (str(leader_id) != str(user_id)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"user_id {user_id} is not leader of club_id {club_id}.")
+    sql = f"SELECT apply_id, club_id, user_id, club_name FROM club_apply WHERE apply_id={int(apply_id)};"
+    cur.execute(sql)
+    result = cur.fetchall()
+    if len(result) == 0:    
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"apply_id {apply_id} does not exist")
+    apply_id, club_id, user_id, club_name = result[0]
+    if accept:
+        if is_member(int(club_id), user_id):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"user_id {user_id} is already member of club_id {club_id}.")
+        sql = f"INSERT INTO club_member(club_id, club_name, user_id, leader) VALUES ({int(club_id)}, \"{str(club_name)}\", \"{str(user_id)}\", 0);"
+        cur.execute(sql)
+    sql = f"DELETE from club_apply where apply_id = {int(apply_id)};"
+    print(sql)
+    cur.execute(sql)
+    conn.commit()
+     
+@app.post("/club-apply/", status_code=status.HTTP_201_CREATED)
+def apply_club(club_id: str, user_id: str):
+    sql = f"SELECT club_id, club_name FROM club_list WHERE club_id = {club_id};"
+    cur.execute(sql)
+    result = cur.fetchall()
+    club_name = result[0][1]
+    if (len(result) == 0):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id {club_id} does not exist.")
+    if (is_member(club_id = int(club_id), user_id = user_id)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is already member of the club")
+    
+    sql = f"INSERT INTO club_apply (club_id, user_id, club_name) VALUES ({int(club_id)}, \"{str(user_id)}\", \"{str(club_name)}\");"
+    cur.execute(sql)
+    conn.commit()
+
+def is_member(club_id: int, user_id: str):
+    sql = f"SELECT club_id, user_id, leader FROM club_member WHERE club_id={int(club_id)} and user_id=\"{str(user_id)}\";"
+    print(sql)
+    cur.execute(sql)
+    result = cur.fetchall()
+    if len(result) == 0:
+        return False
+    return True
+
 @app.post("/club-feed/{club_id}", status_code=status.HTTP_201_CREATED)
-def post_club_feed(club_id, club_feed: ClubFeed):
+def post_club_feed(club_id:str, feed_uploader:str = Form(...), feed_contents:str = Form(...), feed_image:Optional[UploadFile] = None):
     # feed_id, club_id, uploader_id, time, image_url, contents
-    feed_image = club_feed.feed_image
-    feed_uploader = club_feed.feed_uploader
-    feed_contents = club_feed.feed_contents
-
-    with feed_image.file as img:
-        img = Image.open(img)
-        img = img.convert("RGB")
-        # img.show()
-        img_hash = imagehash.phash(img)
-        img_path = os.path.join(FEED_IMG_DIR, str(img_hash) + '.jpg')
-        img.save(img_path)
-    # 중복 제거 구현해야함.
-    # if club_name in rows: ~~
-
-    sql = f'INSERT INTO club_feed(feed_club, feed_uploader, feed_contents, feed_img) \
+    # feed_image = club_feed.feed_image
+    # feed_uploader = club_feed.feed_uploader
+    # feed_contents = club_feed.feed_contents
+    if feed_image:
+        with feed_image.file as img:
+            img = Image.open(img)
+            img = img.convert("RGB")
+            # img.show()
+            img_hash = imagehash.phash(img)
+            img_path = os.path.join(FEED_IMG_DIR, str(img_hash) + '.jpg')
+            img.save(img_path)
+        sql = f'INSERT INTO club_feed(club_id, feed_uploader, feed_contents, feed_img) \
         VALUES(\"{club_id}\", \"{feed_uploader}\", \"{feed_contents}\", \"{BACKEND_URL}/club-feed/images/{img_hash}\");'
+    if not feed_image:
+        sql = f'INSERT INTO club_feed(club_id, feed_uploader, feed_contents) \
+        VALUES(\"{club_id}\", \"{feed_uploader}\", \"{feed_contents}\");'
+
+
+    
     cur.execute(sql)
     conn.commit()
     return
@@ -170,29 +252,41 @@ def upload_club_data(club_name: str = Form(...), club_img: Optional[UploadFile] 
     if not club_img:
         sql = f'INSERT INTO club_list(club_name, club_description, category, opened, leader_id) \
             VALUES(\"{club_name}\", \"{club_description}\", \"{category}\", \"False\", \"{leader_id}\");'
-
-    print(sql)
+    cur.execute(sql)
+    conn.commit()
+    sql = "SELECT LAST_INSERT_ID()"
+    cur.execute(sql)
+    club_id = cur.fetchall()[0][0]
+    sql = f"INSERT INTO club_member(club_id, club_name, user_id, leader) VALUES({int(club_id)}, \"{str(club_name)}\", \"{str(leader_id)}\", 1);"
     cur.execute(sql)
     conn.commit()
     return
 
-@app.put("/club-form/{club_id}",)
-def update_club_data(club_id: str, club_name: str = Form(...), club_img: UploadFile = File(...), club_description: str = Form(...), category: str = Form(...), leader_id: str = Form(...)):
+@app.post("/update-club-form/{club_id}")
+def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optional[UploadFile] = None, club_description: str = Form(...), category: str = Form(...), leader_id: str = Form(...)):
 
     if not len(club_name) < 30:
         return {"detail": "club_name must be shorter than 30"}
     category_list = ["구기체육분과", "레저무예분과", "봉사분과", "어학분과", "연행예술분과", "인문사회분과", "자연과학분과", "종교분과", "창작비평분과", "가등록"]
     if category not in category_list:
         return {"detail": "invalid category."}
-    with club_img.file as img:
-        img = Image.open(img)
-        img = img.convert("RGB")
-        # img.show()
-        img_hash = imagehash.phash(img)
-        img_path = os.path.join(IMG_DIR, str(img_hash) + '.jpg')
-        img.save(img_path)
-    sql = f'UPDATE club_list SET club_name=\"{club_name}\", club_img=\"{BACKEND_URL}/images/{img_hash}\", club_description=\"{club_description}\", category=\"{category}\", leader_id=\"{leader_id}\" club_URL=\"http://kuclub.com/51566714\" WHERE club_id={club_id};'
-    print(sql)
+    if not is_member(int(club_id), leader_id):
+        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=f"leader_id {leader_id} is not member of club_id {club_id}")
+    if club_img:
+        with club_img.file as img:
+            img = Image.open(img)
+            img = img.convert("RGB")
+            # img.show()
+            img_hash = imagehash.phash(img)
+            img_path = os.path.join(IMG_DIR, str(img_hash) + '.jpg')
+            img.save(img_path)
+        sql = f'UPDATE club_list SET club_name=\"{club_name}\", club_img=\"{BACKEND_URL}/images/{img_hash}\", club_description=\"{club_description}\", category=\"{category}\", leader_id=\"{leader_id}\"  WHERE club_id={club_id};'
+    if not club_img:
+        sql = f'UPDATE club_list SET club_name=\"{club_name}\", club_description=\"{club_description}\", category=\"{category}\", leader_id=\"{leader_id}\" WHERE club_id={club_id};'
+    cur.execute(sql)
+    sql = f"UPDATE club_member SET leader=0 WHERE club_id={int(club_id)} and leader=1;"
+    cur.execute(sql)
+    sql = f"UPDATE club_member SET leader=1 WHERE club_id={int(club_id)} and user_id=\"{leader_id}\";"
     cur.execute(sql)
     conn.commit()
     
@@ -201,7 +295,7 @@ def update_club_data(club_id: str, club_name: str = Form(...), club_img: UploadF
 
 
 if __name__ == '__main__':
-    eureka_client.init(eureka_server="http://54.180.68.142:8761/eureka", app_name="CLUB-SERVICE", instance_port=80, instance_ip="35.170.94.193")
-    print("EUREKA SEVER: http://54.180.68.142:8761/eureka")
+    #eureka_client.init(eureka_server="http://54.180.68.142:8761/eureka", app_name="CLUB-SERVICE", instance_port=80, instance_ip="35.170.94.193")
+    #print("EUREKA SEVER: http://54.180.68.142:8761/eureka")
     uvicorn.run("backend:app", host="172.31.29.143", port = 5005)
     
