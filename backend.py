@@ -77,10 +77,17 @@ async def get_club_information(club_id):
 
 @app.get("/club-feed/{club_id}")
 async def get_club_feed(club_id):
-    sql = f"SELECT feed_uploader, feed_img, feed_contents, time FROM club_feed WHERE club_id={club_id} ORDER BY time DESC;"
+    #sql = f'SELECT JSON_ARRAYAGG(JSON_OBJECT("feed_uploader", feed_uploader, "feed_img", feed_img, "feed_contents", feed_contents, "time", time)) FROM club_feed WHERE club_id={club_id} ORDER BY time DESC;'
+    sql = f'SELECT feed_uploader, feed_img , feed_contents, time FROM club_feed WHERE club_id={club_id} ORDER BY time DESC;'
     cur.execute(sql)
     rows = cur.fetchall()
-    json = jsonable_encoder(rows)
+    
+    feed_list = list()
+    for feed in rows:
+        feed_uploader, feed_img , feed_contents, time = feed
+        feed_dict = {'feed_uploader':feed_uploader, 'feed_img': feed_img, 'feed_contents': feed_contents, 'time': time}
+        feed_list.append(feed_dict)
+    json = jsonable_encoder(feed_list)
     return json
 
 @app.get("/club-feed/images/{img_id}")
@@ -95,17 +102,14 @@ async def get_club_feed_img(img_id):
 
 @app.get("/registered/{user_id}")
 def get_registered_club(user_id: str):
-    sql = f"select club_id, club_name from club_list where leader_id=\"{user_id}\""
+    sql = f"SELECT club_id, club_name, leader from club_member where user_id=\"{user_id}\""
     cur.execute(sql)
     result = cur.fetchall()
     if(len(result) == 0):
         return {"club_id": []}
     registered_clubs = []
     for club in result:
-        registered_clubs.append({"club_id":club[0], "club_name":club[1]})
-    
-
-
+        registered_clubs.append({"club_id":club[0], "club_name":club[1], "leader": bool(club[2])})
     return jsonable_encoder(registered_clubs)
 
 @app.get("/club-apply/{club_id}")
@@ -114,9 +118,10 @@ def get_club_apply(club_id:str, user_id: str):
     sql = f"SELECT club_id, leader_id FROM club_list WHERE club_id = {club_id};"
     cur.execute(sql)
     result = cur.fetchall()
-    leader_id = result[0][1]
     if (len(result) == 0):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id {club_id} does not exist.")
+    
+    leader_id = result[0][1]
     if (str(leader_id) != str(user_id)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"user_id {user_id} is not leader of club_id {club_id}.")
     sql = f"SELECT apply_id, club_id, user_id, club_name FROM club_apply WHERE club_id=\"{club_id}\""
@@ -134,7 +139,7 @@ def get_club_apply(club_id:str, user_id: str):
     
 
 @app.delete("/club-apply/{club_id}")
-def apply_accept_deny(club_id: str,  user_id: str, apply_id:str, accept:bool):
+def apply_accept_deny(club_id: str,  user_id:str = Form(...), apply_id:str = Form(...), accept:bool = Form(...)):
     sql = f"SELECT club_id, leader_id, club_name FROM club_list WHERE club_id = {club_id};"
     cur.execute(sql)
     result = cur.fetchall()
@@ -222,6 +227,15 @@ def upload_image_file(club_img: bytes = File(...)):
 
     return img_hash
 
+def is_exist_club(club_name:str):
+    sql = f"SELECT EXISTS (SELECT club_id FROM club_list WHERE club_name=\"{club_name}\" LIMIT 1) AS SUCCESS;"
+    cur.execute(sql)
+    result = cur.fetchall()
+    exist = result[0][0]
+    if exist:
+        return True
+    return False
+
 
 @app.post("/club-form", status_code=status.HTTP_201_CREATED)
 def upload_club_data(club_name: str = Form(...), club_img: Optional[UploadFile] = None, club_description: str = Form(...), category: str = Form(...), leader_id: str = Form(...)):
@@ -231,6 +245,8 @@ def upload_club_data(club_name: str = Form(...), club_img: Optional[UploadFile] 
     # club_img = data.club_img
     # club_description = data.club_description
     # leader_id = data.leader_id
+    if is_exist_club(club_name):
+        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=f"club_name {club_name} is already exists.")
     if not len(club_name) < 30:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The club_name is too long. It must be shorter than 30 characters")
     category_list = ["구기체육분과", "레저무예분과", "봉사분과", "어학분과", "연행예술분과", "인문사회분과", "자연과학분과", "종교분과", "창작비평분과", "가등록"]
@@ -266,10 +282,10 @@ def upload_club_data(club_name: str = Form(...), club_img: Optional[UploadFile] 
 def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optional[UploadFile] = None, club_description: str = Form(...), category: str = Form(...), leader_id: str = Form(...)):
 
     if not len(club_name) < 30:
-        return {"detail": "club_name must be shorter than 30"}
+        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The club_name is too long. It must be shorter than 30 characters")
     category_list = ["구기체육분과", "레저무예분과", "봉사분과", "어학분과", "연행예술분과", "인문사회분과", "자연과학분과", "종교분과", "창작비평분과", "가등록"]
     if category not in category_list:
-        return {"detail": "invalid category."}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f'The category is wrong. Category includes {category_list}')
     if not is_member(int(club_id), leader_id):
         raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=f"leader_id {leader_id} is not member of club_id {club_id}")
     if club_img:
@@ -286,7 +302,9 @@ def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optiona
     cur.execute(sql)
     sql = f"UPDATE club_member SET leader=0 WHERE club_id={int(club_id)} and leader=1;"
     cur.execute(sql)
-    sql = f"UPDATE club_member SET leader=1 WHERE club_id={int(club_id)} and user_id=\"{leader_id}\";"
+    sql = f"UPDATE club_member SET leader=1 WHERE club_id={int(club_id)} and user_id=\"{str(leader_id)}\";"
+    cur.execute(sql)
+    sql = f"UPDATE club_member SET club_name=\"{str(club_name)}\" WHERE club_id={int(club_id)};"
     cur.execute(sql)
     conn.commit()
     
@@ -295,7 +313,7 @@ def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optiona
 
 
 if __name__ == '__main__':
-    #eureka_client.init(eureka_server="http://54.180.68.142:8761/eureka", app_name="CLUB-SERVICE", instance_port=80, instance_ip="35.170.94.193")
-    #print("EUREKA SEVER: http://54.180.68.142:8761/eureka")
+    eureka_client.init(eureka_server="http://54.180.68.142:8761/eureka", app_name="CLUB-SERVICE", instance_port=80, instance_ip="35.170.94.193")
+    print("EUREKA SEVER: http://54.180.68.142:8761/eureka")
     uvicorn.run("backend:app", host="172.31.29.143", port = 5005)
     
