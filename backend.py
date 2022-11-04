@@ -13,6 +13,7 @@ from fastapi.encoders import jsonable_encoder
 import py_eureka_client.eureka_client as eureka_client
 from pydantic import BaseModel
 from typing import Optional
+import pymysqlpool
 
 class ClubFormData(BaseModel):
     club_name: str 
@@ -44,7 +45,7 @@ cur = conn.cursor()
 
 app = FastAPI()
 @app.get("/club-list")
-async def get_club_list():
+def get_club_list():
     sql = "SELECT club_id, club_name, club_img, club_description, category, opened, club_URL, leader_id FROM club_list ORDER BY category;"
     cur.execute(sql)
     rows = cur.fetchall()
@@ -54,7 +55,7 @@ async def get_club_list():
 
 
 @app.get("/images/{img_id}")
-async def get_img(img_id):
+def get_img(img_id):
     if not img_id.isalnum() or len(img_id) != 16:
         return {"detail": "Not Found"}
     img_dir = os.path.join(IMG_DIR, img_id + '.jpg')
@@ -64,7 +65,7 @@ async def get_img(img_id):
     return FileResponse(img_dir)
 
 @app.get("/club-information/{club_id}")
-async def get_club_information(club_id):
+def get_club_information(club_id):
     sql = f"SELECT club_id, club_name, club_img, club_description, category, opened, club_URL, leader_id FROM club_list WHERE club_id = {club_id};"
     cur.execute(sql)
     rows = cur.fetchall()
@@ -76,7 +77,7 @@ async def get_club_information(club_id):
     return json
 
 @app.get("/club-feed/{club_id}")
-async def get_club_feed(club_id):
+def get_club_feed(club_id):
     #sql = f'SELECT JSON_ARRAYAGG(JSON_OBJECT("feed_uploader", feed_uploader, "feed_img", feed_img, "feed_contents", feed_contents, "time", time)) FROM club_feed WHERE club_id={club_id} ORDER BY time DESC;'
     sql = f'SELECT feed_uploader, feed_img , feed_contents, time FROM club_feed WHERE club_id={club_id} ORDER BY time DESC;'
     cur.execute(sql)
@@ -91,7 +92,7 @@ async def get_club_feed(club_id):
     return json
 
 @app.get("/club-feed/images/{img_id}")
-async def get_club_feed_img(img_id):
+def get_club_feed_img(img_id):
     if not img_id.isalnum() or len(img_id) != 16:
         return {"detail": "Not Found"}
     img_dir = os.path.join(FEED_IMG_DIR, img_id + '.jpg')
@@ -143,10 +144,10 @@ def apply_accept_deny(club_id: str,  user_id:str = Form(...), apply_id:str = For
     sql = f"SELECT club_id, leader_id, club_name FROM club_list WHERE club_id = {club_id};"
     cur.execute(sql)
     result = cur.fetchall()
-    leader_id = result[0][1]
-    club_name = result[0][2]
     if (len(result) == 0):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id {club_id} does not exist.")
+    leader_id = result[0][1]
+    club_name = result[0][2]
     if (str(leader_id) != str(user_id)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"user_id {user_id} is not leader of club_id {club_id}.")
     sql = f"SELECT apply_id, club_id, user_id, club_name FROM club_apply WHERE apply_id={int(apply_id)};"
@@ -166,13 +167,14 @@ def apply_accept_deny(club_id: str,  user_id:str = Form(...), apply_id:str = For
     conn.commit()
      
 @app.post("/club-apply/", status_code=status.HTTP_201_CREATED)
-def apply_club(club_id: str, user_id: str):
+def apply_club(club_id: str=Form(...), user_id: str=Form(...)):
     sql = f"SELECT club_id, club_name FROM club_list WHERE club_id = {club_id};"
     cur.execute(sql)
     result = cur.fetchall()
-    club_name = result[0][1]
+    
     if (len(result) == 0):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id {club_id} does not exist.")
+    club_name = result[0][1]
     if (is_member(club_id = int(club_id), user_id = user_id)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is already member of the club")
     
@@ -307,13 +309,12 @@ def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optiona
     sql = f"UPDATE club_member SET club_name=\"{str(club_name)}\" WHERE club_id={int(club_id)};"
     cur.execute(sql)
     conn.commit()
-    
     return 
 
 
 
 if __name__ == '__main__':
-    eureka_client.init(eureka_server="http://54.180.68.142:8761/eureka", app_name="CLUB-SERVICE", instance_port=80, instance_ip="35.170.94.193")
-    print("EUREKA SEVER: http://54.180.68.142:8761/eureka")
+    eureka_server = "http://54.180.68.142:8761/eureka"
+    eureka_response = eureka_client.init(eureka_server=eureka_server, app_name="CLUB-SERVICE", instance_port=80, instance_ip="35.170.94.193")
     uvicorn.run("backend:app", host="172.31.29.143", port = 5005)
     
