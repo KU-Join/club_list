@@ -16,7 +16,7 @@ def group_by_category(rows):
     for club in json_data:
         club_id, club_name, club_img, club_description, category, opened, club_URL, leader_id = club
 
-        club_dict = {"club_name":club_name, "club_id":club_id, "club_img":club_img, "club_description":club_description, "opened":opened, "club_URL":club_URL, "leader_id":leader_id}
+        club_dict = {"club_name":club_name, "club_id":club_id, "club_img":club_img, "club_description":club_description, "opened": bool(opened), "club_URL":club_URL, "leader_id":leader_id}
         club_list[category].append(club_dict)
     # dict type
     # for club in json_data:
