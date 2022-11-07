@@ -2,4 +2,4 @@ __pycache__/
 img/
 json_utility/__pycache__
 .venv/
-nohup.out
+nohup*
