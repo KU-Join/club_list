@@ -181,7 +181,7 @@ def get_club_apply(club_id: str, user_id:str):
     conn.close()
     application_list = list()
     if (len(result) == 0):
-        return application_list
+        return jsonable_encoder({"club_id":[]})
     for application in result:
         apply_id, club_id, user_id, club_name = application
         apply_dict = {"apply_id":str(apply_id), "club_name": str(club_name), "club_id":str(club_id), "user_id": str(user_id)}
@@ -377,6 +377,7 @@ def upload_club_data(club_name: str = Form(...), club_img: Optional[UploadFile] 
     # club_img = data.club_img
     # club_description = data.club_description
     # leader_id = data.leader_id
+
     if is_exist_club(club_name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_name {club_name} is already exists.")
     if not len(club_name) < 30:
@@ -413,7 +414,14 @@ def upload_club_data(club_name: str = Form(...), club_img: Optional[UploadFile] 
     conn.close()
 
 @app.post("/update-club-form/{club_id}")
-def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optional[UploadFile] = None, club_description: str = Form(...), category: str = Form(...), leader_id: str = Form(...), opened: bool = Form(...)):
+def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optional[UploadFile] = None, club_description: str = Form(...), category: str = Form(...), leader_id: str = Form(...), opened: str = Form(...)):
+    if opened == "true":
+        opened = True
+    elif opened == "false":
+        opened = False
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"opened is must be true/false")
+    
     if not club_id.isdigit():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id must be number")
     if not len(club_name) < 30:
@@ -421,7 +429,7 @@ def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optiona
     category_list = ["구기체육분과", "레저무예분과", "봉사분과", "어학분과", "연행예술분과", "인문사회분과", "자연과학분과", "종교분과", "창작비평분과", "가등록"]
     if category not in category_list:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f'The category is wrong. Category includes {category_list}')
-    if not is_member(int(club_id), leader_id):
+    if not is_member(str(club_id), leader_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"leader_id {leader_id} is not member of club_id {club_id}")
     if club_img:
         with club_img.file as img:
