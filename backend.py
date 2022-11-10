@@ -14,9 +14,16 @@ import py_eureka_client.eureka_client as eureka_client
 from pydantic import BaseModel
 from typing import Optional
 import pymysqlpool
+import requests
+
+from starlette_zipkin import ZipkinMiddleware, ZipkinConfig, B3Headers
+
+
+
 
 config={'host':'localhost', 'user':'root', 'password':'ghkdidakdmf', 'database':'club_list', 'autocommit':True}
-pool1 = pymysqlpool.ConnectionPool(size=4, maxsize=6, pre_create_num=3, name='pool1', **config)
+pool1 = pymysqlpool.ConnectionPool(size=10, maxsize=20, pre_create_num=8, name='pool1', **config)
+#pool1 = pymysqlpool.ConnectionPool(size=2, maxsize=4, pre_create_num=2, name='pool1', **config)
 
 class ClubFormData(BaseModel):
     club_name: str 
@@ -50,13 +57,26 @@ BACKEND_URL = "http://35.170.94.193"
 
 conn = pymysql.connect(host='localhost', user='root', password='ghkdidakdmf', db='club_list', charset='utf8')
 conn.ping(reconnect=True)
-conn.query('SET GLOBAL connect_timeout=57600')
-conn.query('SET GLOBAL wait_timeout=57600')
-conn.query('SET GLOBAL interactive_timeout=57600')
+conn.query('SET GLOBAL connect_timeout=105200')
+conn.query('SET GLOBAL wait_timeout=105200')
+conn.query('SET GLOBAL interactive_timeout=105200')
 cur = conn.cursor()
 
+zipkin_config = ZipkinConfig(
+    host="54.180.68.142",
+    port=9411,
+    service_name="club-service",
+    sample_rate=1.0,
+    inject_response_headers=True,
+    force_new_trace=False,
+    json_encoder=json.dumps,
+    header_formatter=B3Headers
+)
 
 app = FastAPI()
+app.add_middleware(ZipkinMiddleware, config=zipkin_config)
+
+
 @app.get("/club-list")
 def get_club_list():
     conn = pool1.get_connection()
@@ -227,7 +247,7 @@ def delete_club(club_id:str, password:str):
     cur.execute(sql)
     result = cur.fetchall()
     if len(result) == 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detal=f"club_id {club_id} does not exist")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id {club_id} does not exist")
     sql = f"DELETE FROM club_feed WHERE club_id = {int(club_id)}"
     cur.execute(sql)
     sql = f"DELETE FROM club_member WHERE club_id = {int(club_id)}"
@@ -412,6 +432,9 @@ def upload_club_data(club_name: str = Form(...), club_img: Optional[UploadFile] 
     cur.execute(sql)
     conn.commit()
     conn.close()
+    data = {"topics": {str(club_id)}}
+
+    # requests.post(url="http://52.79.246.49:8000/chat-service/register", json=json.dumps(data))
 
 @app.post("/update-club-form/{club_id}")
 def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optional[UploadFile] = None, club_description: str = Form(...), category: str = Form(...), leader_id: str = Form(...), opened: str = Form(...)):
