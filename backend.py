@@ -82,7 +82,7 @@ def get_club_list():
     conn = pool1.get_connection()
     cur = conn.cursor()
 
-    sql = "SELECT club_id, club_name, club_img, club_description, category, opened, club_URL, leader_id FROM club_list ORDER BY category;"
+    sql = "SELECT club_id, club_name, club_img, club_description, category, opened, club_URL, leader_id FROM club_list ORDER BY category, club_id;"
 
     cur.execute(sql)
     rows = cur.fetchall()
