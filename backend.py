@@ -257,6 +257,7 @@ def delete_club(club_id:str, password:str):
     sql = f"DELETE FROM club_list WHERE club_id = {int(club_id)}"
     cur.execute(sql)
     conn.close()
+    requests.post(url="http://52.79.246.49:8000/chat-service/de-register", json={"topics": [str(club_id)]})
 
 
     
@@ -432,9 +433,8 @@ def upload_club_data(club_name: str = Form(...), club_img: Optional[UploadFile] 
     cur.execute(sql)
     conn.commit()
     conn.close()
-    data = {"topics": {str(club_id)}}
 
-    # requests.post(url="http://52.79.246.49:8000/chat-service/register", json=json.dumps(data))
+    requests.post(url="http://52.79.246.49:8000/chat-service/register", json={"topics": [str(club_name)]})
 
 @app.post("/update-club-form/{club_id}")
 def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optional[UploadFile] = None, club_description: str = Form(...), category: str = Form(...), leader_id: str = Form(...), opened: str = Form(...)):
