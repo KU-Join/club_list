@@ -47,7 +47,7 @@ class Item_apply_accept_deny(BaseModel):
     accept:bool = Form(...)
 
 
-
+json_title = "contents"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMG_DIR = os.path.join(BASE_DIR, "img")
@@ -104,11 +104,12 @@ def get_img(img_id):
 
 @app.get("/club-information/{club_id}")
 def get_club_information(club_id):
-    conn = pool1.get_connection()
-    cur = conn.cursor()
+    
     if not club_id.isdigit():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id must be number")
     sql = f"SELECT club_id, club_name, club_img, club_description, category, opened, club_URL, leader_id FROM club_list WHERE club_id = {club_id};"
+    conn = pool1.get_connection()
+    cur = conn.cursor()
     cur.execute(sql)
     rows = cur.fetchall()
     conn.close()
@@ -136,7 +137,7 @@ def get_club_feed(club_id: str):
         feed_uploader, feed_img , feed_contents, time = feed
         feed_dict = {'feed_uploader':feed_uploader, 'feed_img': feed_img, 'feed_contents': feed_contents, 'time': time}
         feed_list.append(feed_dict)
-    json = jsonable_encoder(feed_list)
+    json = jsonable_encoder({json_title:feed_list})
     return json
 
 @app.get("/club-feed/images/{img_id}")
@@ -158,11 +159,11 @@ def get_registered_club(user_id: str):
     result = cur.fetchall()
     conn.close()
     if(len(result) == 0):
-        return {"club_id": []}
+        return {json_title:{"club_id": []}}
     registered_clubs = []
     for club in result:
         registered_clubs.append({"club_id":club[0], "club_name":club[1], "leader": bool(club[2])})
-    return jsonable_encoder(registered_clubs)
+    return jsonable_encoder({json_title:registered_clubs})
 
 @app.get("/registered/{user_id}/{club_id}")
 def get_registered_club_user(user_id: str, club_id: str):
@@ -201,12 +202,12 @@ def get_club_apply(club_id: str, user_id:str):
     conn.close()
     application_list = list()
     if (len(result) == 0):
-        return jsonable_encoder({"club_id":[]})
+        return jsonable_encoder({json_title:{"club_id":[]}})
     for application in result:
         apply_id, club_id, user_id, club_name = application
         apply_dict = {"apply_id":str(apply_id), "club_name": str(club_name), "club_id":str(club_id), "user_id": str(user_id)}
         application_list.append(apply_dict)
-    return jsonable_encoder(application_list)
+    return jsonable_encoder({json_title:application_list})
         
 @app.get("/club-member/{club_id}")
 def get_club_member(club_id:str):
@@ -227,7 +228,7 @@ def get_club_member(club_id:str):
         leader = bool(member[1])
         dic = {"user_id":user_id, "leader":leader}
         member_list.append(dic)
-    return jsonable_encoder(member_list)
+    return jsonable_encoder({json_title:member_list})
 
 
 
@@ -241,13 +242,15 @@ def delete_club(club_id:str, password:str):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"wrong password")
     if not club_id.isdigit():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id must be number")
-    sql = f"SELECT club_id FROM club_list WHERE club_id = {int(club_id)}"
+    sql = f"SELECT club_id, club_name FROM club_list WHERE club_id = {int(club_id)}"
     conn = pool1.get_connection()
     cur = conn.cursor()
     cur.execute(sql)
     result = cur.fetchall()
+    
     if len(result) == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id {club_id} does not exist")
+    club_name = result[0][1]
     sql = f"DELETE FROM club_feed WHERE club_id = {int(club_id)}"
     cur.execute(sql)
     sql = f"DELETE FROM club_member WHERE club_id = {int(club_id)}"
@@ -257,7 +260,7 @@ def delete_club(club_id:str, password:str):
     sql = f"DELETE FROM club_list WHERE club_id = {int(club_id)}"
     cur.execute(sql)
     conn.close()
-    requests.post(url="http://52.79.246.49:8000/chat-service/de-register", json={"topics": [str(club_id)]})
+    requests.post(url="http://52.79.246.49:8000/chat-service/de-register", json={"topics": [str(club_name)]})
 
 
     
@@ -443,7 +446,7 @@ def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optiona
     elif opened == "false":
         opened = False
     else:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"opened is must be true/false")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"opened must be true/false")
     
     if not club_id.isdigit():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id must be number")
@@ -483,5 +486,5 @@ def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optiona
 if __name__ == '__main__':
     eureka_server = "http://54.180.68.142:8761/eureka"
     eureka_response = eureka_client.init(eureka_server=eureka_server, app_name="CLUB-SERVICE", instance_port=80, instance_ip="35.170.94.193")
-    uvicorn.run("backend:app", host="172.31.29.143", port = 5005)
+    uvicorn.run("backend:app", host="0.0.0.0", port = 5005)
     
