@@ -21,7 +21,7 @@ from starlette_zipkin import ZipkinMiddleware, ZipkinConfig, B3Headers
 
 
 
-config={'host':'localhost', 'user':'root', 'password':'ghkdidakdmf', 'database':'club_list', 'autocommit':True}
+config={'host':'HOST', 'user':'ROTT', 'password':'PASSWORD', 'database':'club_list', 'autocommit':True}
 pool1 = pymysqlpool.ConnectionPool(size=10, maxsize=20, pre_create_num=8, name='pool1', **config)
 #pool1 = pymysqlpool.ConnectionPool(size=2, maxsize=4, pre_create_num=2, name='pool1', **config)
 
@@ -53,9 +53,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMG_DIR = os.path.join(BASE_DIR, "img")
 FEED_IMG_DIR = os.path.join(BASE_DIR, "feed_img")
 
-BACKEND_URL = "http://35.170.94.193"
+BACKEND_URL = "BACKEND_URL"
 
-conn = pymysql.connect(host='localhost', user='root', password='ghkdidakdmf', db='club_list', charset='utf8')
+conn = pymysql.connect(host='HOST', user='USER', password='PASSWORD', db='club_list', charset='utf8')
 conn.ping(reconnect=True)
 conn.query('SET GLOBAL connect_timeout=105200')
 conn.query('SET GLOBAL wait_timeout=105200')
@@ -63,7 +63,7 @@ conn.query('SET GLOBAL interactive_timeout=105200')
 cur = conn.cursor()
 
 zipkin_config = ZipkinConfig(
-    host="54.180.68.142",
+    host="HOST",
     port=9411,
     service_name="club-service",
     sample_rate=1.0,
@@ -238,7 +238,7 @@ def get_club_member(club_id:str):
 
 @app.delete("/club-list/{club_id}")
 def delete_club(club_id:str, password:str):
-    if not password == "7777":
+    if not password == "PASS": # instant password
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"wrong password")
     if not club_id.isdigit():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"club_id must be number")
@@ -484,7 +484,7 @@ def update_club_data(club_id: str, club_name: str = Form(...), club_img: Optiona
 
 
 if __name__ == '__main__':
-    eureka_server = "http://54.180.68.142:8761/eureka"
-    eureka_response = eureka_client.init(eureka_server=eureka_server, app_name="CLUB-SERVICE", instance_port=80, instance_ip="35.170.94.193")
+    eureka_server = "http://EUREKA_SERVER:8761/eureka"
+    eureka_response = eureka_client.init(eureka_server=eureka_server, app_name="CLUB-SERVICE", instance_port=80, instance_ip="BACKEND_SERVER")
     uvicorn.run("backend:app", host="0.0.0.0", port = 5005)
     
